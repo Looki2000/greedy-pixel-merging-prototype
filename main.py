@@ -65,17 +65,27 @@ def greedy_voxel_merging():
             if last_material != 0 and map_copy[y][x] != last_material:
                 block_end_x = x
                 block_ended = True
-            # OR end of map row on some material
+            # OR end of map row on some material6
             elif x == pixel_max_idx and map_copy[y][x] != 0:
                 block_end_x = x + 1
                 block_ended = True
 
             if block_ended:
-                block_end_y = y + 1
+                # DEBUG #
+                pygame.draw.circle(window, (255, 0, 0), (block_start_x * pixel_size + half_pixel_size, y * pixel_size + half_pixel_size), 5)
+                #########
+
+                block_end_y = y
 
                 # scanning for other rows under existing row that can be included in the block
                 scan_loop = True
-                while scan_loop:
+                while True:
+                    block_end_y += 1
+
+                    # if the end of the map is reached, break the loop
+                    if block_end_y == pixel_count:
+                        break
+
                     # check if all materials in row are the same as the block's material
                     for x2 in range(block_start_x, block_end_x):
                         if map_copy[block_end_y][x2] != last_material:
@@ -88,12 +98,6 @@ def greedy_voxel_merging():
                     # if the loop ended without breaking, then all materials in the row are the same as the block's material
 
                     map_copy[block_end_y][block_start_x:block_end_x] = 0
-
-                    block_end_y += 1
-
-                    # if the end of the map is reached, break the loop
-                    if block_end_y == pixel_count:
-                        scan_loop = False
 
                 ## add rectangle to rectangles list
                 rectangles.append([block_start_x, y, block_end_x, block_end_y, last_material - 1])
