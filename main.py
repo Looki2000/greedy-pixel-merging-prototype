@@ -12,6 +12,10 @@ pixel_material = 1
 
 
 grid_col = (200,) * 3
+
+
+debug = False
+debug_fps = 8
 ##################
 
 if window_size % pixel_count != 0:
@@ -37,18 +41,31 @@ pixel_material_cols = tuple(tuple(int(val * 255) for val in colorsys.hsv_to_rgb(
 rect_cols = tuple(tuple(int(val * 255) for val in colorsys.hsv_to_rgb(h/360, 1, 0.75)) for h in range(0, 360, 36))
 
 
+def draw_map():
+    # draw grid lines
+    for i in range(pixel_count):
+        pygame.draw.line(window, grid_col, (0, i * pixel_size), (window_size, i * pixel_size))
+        pygame.draw.line(window, grid_col, (i * pixel_size, 0), (i * pixel_size, window_size))
+
+    # draw all pixels:
+    for y in range(pixel_count):
+        for x in range(pixel_count):
+            if map[y][x] != 0:
+                pygame.draw.rect(window, pixel_material_cols[map[y][x] - 1], (x * pixel_size, y * pixel_size, pixel_size, pixel_size))
+
+
 # array of pixels
 if "map.npy" in os.listdir():
     map = np.load("map.npy")
+    print("loaded map from map.npy file")
 else:
     map = np.zeros((pixel_count, pixel_count), dtype=np.int8)
+    print("map.npy not found, creating new map")
 
 
 # rectangles generated from map using greedy pixel merging
 # format: [x1, y1, x2, y2, material]
 rectangles = []
-
-
 
 def greedy_voxel_merging():
     map_copy = map.copy()
@@ -58,27 +75,42 @@ def greedy_voxel_merging():
 
         for x in range(pixel_count):
 
+            #### block starting/ending detections ####
+
             block_ended = False
-            
-            ## end of block
-            # material switch including to air, NOT including from air
-            if last_material != 0 and map_copy[y][x] != last_material:
-                block_end_x = x
-                block_ended = True
-            # OR end of map row on some material6
-            elif x == pixel_max_idx and map_copy[y][x] != 0:
+
+            # if material changed
+            if map_copy[y][x] != last_material:
+                ## if block ended
+                # material switch NOT from air
+                if last_material != 0:
+                    block_end_x = x
+                    block_ended = True
+
+                # if new block just started AND NOT block ended while new one starting
+                if map_copy[y][x] != 0 and not block_ended:
+                    block_start_x = x
+
+            ## if block ended
+            # end of map row on NOT air
+            if x == pixel_max_idx and map_copy[y][x] != 0:
                 block_end_x = x + 1
                 block_ended = True
+                last_material = map_copy[y][x]
+
+
+            ############################################
 
             if block_ended:
-                # DEBUG #
-                pygame.draw.circle(window, (255, 0, 0), (block_start_x * pixel_size + half_pixel_size, y * pixel_size + half_pixel_size), 5)
-                #########
-
-                block_end_y = y
+                if debug:
+                    pygame.draw.circle(window, (255, 0, 0), (block_start_x * pixel_size, y * pixel_size + half_pixel_size - 5), 5)
+                    pygame.draw.circle(window, (0, 255, 0), (block_end_x * pixel_size, y * pixel_size + half_pixel_size + 5), 5)
+                    pygame.display.update()
+                    clock.tick(debug_fps)
 
                 # scanning for other rows under existing row that can be included in the block
-                scan_loop = True
+                block_end_y = y
+                invalid_row = False
                 while True:
                     block_end_y += 1
 
@@ -88,30 +120,50 @@ def greedy_voxel_merging():
 
                     # check if all materials in row are the same as the block's material
                     for x2 in range(block_start_x, block_end_x):
+                        if debug:
+                            pygame.draw.circle(window, (255, 0, 255), (x2 * pixel_size + half_pixel_size, block_end_y * pixel_size + half_pixel_size-5), 5)
+                            pygame.display.update()
+                            clock.tick(debug_fps)
+
                         if map_copy[block_end_y][x2] != last_material:
-                            scan_loop = False
+                            invalid_row = True
                             break
-                    
-                    if not scan_loop:
+
+                    if invalid_row:
                         break
+                    # "else continue"
 
-                    # if the loop ended without breaking, then all materials in the row are the same as the block's material
-
+                    # set all values of next row that will be added to the block to 0 to prevent them from being treeated as a new block in the next y loop iteration
                     map_copy[block_end_y][block_start_x:block_end_x] = 0
 
-                ## add rectangle to rectangles list
+                    if debug:
+                        for i in range(block_start_x, block_end_x):
+                            pygame.draw.circle(window, (0, 0, 255), (i * pixel_size + half_pixel_size, block_end_y * pixel_size + half_pixel_size), 5)
+                        pygame.display.update()
+                        clock.tick(debug_fps)
+
+                # add block to rectangles list
                 rectangles.append([block_start_x, y, block_end_x, block_end_y, last_material - 1])
 
+                if debug:
+                    # draw last rectangle
+                    #pygame.draw.rect(window, rect_cols[rect[4]], (rect[0] * pixel_size, rect[1] * pixel_size, (rect[2] - rect[0]) * pixel_size, (rect[3] - rect[1]) * pixel_size), 5)
+                    pygame.draw.rect(window, rect_cols[last_material - 1], (block_start_x * pixel_size, y * pixel_size, (block_end_x - block_start_x) * pixel_size, (block_end_y - y) * pixel_size), 5)
 
-            # if new block just starts
-            if map_copy[y][x] != 0 and map_copy[y][x] != last_material:
-                block_start_x = x
+                # if last block is touching current block, use current position as current block's start position
+                if map_copy[y][x] != 0:
+                    block_start_x = x
 
             last_material = map_copy[y][x]
 
 
+if debug:
+    draw_map()
 
 greedy_voxel_merging()
+
+if debug:
+    debug = False
 
 last_mouse_tile_pos = None
 mouse_pressed = False
@@ -162,28 +214,15 @@ while True:
 
     window.fill((0, 0, 0))
 
-    # draw grid lines
-    for i in range(pixel_count):
-        pygame.draw.line(window, grid_col, (0, i * pixel_size), (window_size, i * pixel_size))
-        pygame.draw.line(window, grid_col, (i * pixel_size, 0), (i * pixel_size, window_size))
-
-    # draw all pixels:
-    for y in range(pixel_count):
-        for x in range(pixel_count):
-            if map[y][x] != 0:
-                pygame.draw.rect(window, pixel_material_cols[map[y][x] - 1], (x * pixel_size, y * pixel_size, pixel_size, pixel_size))
+    draw_map()
 
     # draw rectangles with thickness
     for rect in rectangles:
-        #pygame.draw.rect(window, rect_col, (rect[0] * pixel_size, rect[1] * pixel_size, rect[2] * pixel_size, rect[3] * pixel_size), 5)
         pygame.draw.rect(window, rect_cols[rect[4]], (rect[0] * pixel_size, rect[1] * pixel_size, (rect[2] - rect[0]) * pixel_size, (rect[3] - rect[1]) * pixel_size), 5)
     
     # draw pixel type text
     text = font.render(f"Pixel type: {pixel_material}", True, pixel_material_cols[pixel_material - 1])
     window.blit(text, (10, 5))
-
-    # ONLY FOR INSIDE FUNCTION DRAW DEBUG
-    greedy_voxel_merging()
 
     # update
     pygame.display.update()
