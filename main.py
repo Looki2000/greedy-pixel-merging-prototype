@@ -4,9 +4,9 @@ import colorsys
 import os
 
 ##### CONFIG #####
-window_size = 720
+window_size = 832
 
-pixel_count = 20 # must be a factor of window_size
+pixel_count = 32 # window_size must be divisible by pixel_count without remainder
 
 pixel_material = 1
 
@@ -58,6 +58,15 @@ def draw_map():
 if "map.npy" in os.listdir():
     map = np.load("map.npy")
     print("loaded map from map.npy file")
+    
+    if map.shape[0] > pixel_count:
+        print("map in file is bigger than pixel_count, cropping map")
+        map = map[:pixel_count, :pixel_count]
+    elif map.shape[0] < pixel_count:
+        print("map in file is smaller than pixel_count, extending map with air")
+        map = np.pad(map, ((0, pixel_count - map.shape[0]), (0, pixel_count - map.shape[1])), "constant", constant_values=0)
+        
+
 else:
     map = np.zeros((pixel_count, pixel_count), dtype=np.int8)
     print("map.npy not found, creating new map")
@@ -103,6 +112,7 @@ def greedy_voxel_merging():
 
             if block_ended:
                 if debug:
+                    pygame.event.get() # dummy event to prevent pygame from freezing
                     pygame.draw.circle(window, (255, 0, 0), (block_start_x * pixel_size, y * pixel_size + half_pixel_size - 5), 5)
                     pygame.draw.circle(window, (0, 255, 0), (block_end_x * pixel_size, y * pixel_size + half_pixel_size + 5), 5)
                     pygame.display.update()
@@ -121,6 +131,7 @@ def greedy_voxel_merging():
                     # check if all materials in row are the same as the block's material
                     for x2 in range(block_start_x, block_end_x):
                         if debug:
+                            pygame.event.get() # dummy event to prevent pygame from freezing
                             pygame.draw.circle(window, (255, 0, 255), (x2 * pixel_size + half_pixel_size, block_end_y * pixel_size + half_pixel_size-5), 5)
                             pygame.display.update()
                             clock.tick(debug_fps)
@@ -137,6 +148,7 @@ def greedy_voxel_merging():
                     map_copy[block_end_y][block_start_x:block_end_x] = 0
 
                     if debug:
+                        pygame.event.get() # dummy event to prevent pygame from freezing
                         for i in range(block_start_x, block_end_x):
                             pygame.draw.circle(window, (0, 0, 255), (i * pixel_size + half_pixel_size, block_end_y * pixel_size + half_pixel_size), 5)
                         pygame.display.update()
@@ -146,9 +158,11 @@ def greedy_voxel_merging():
                 rectangles.append([block_start_x, y, block_end_x, block_end_y, last_material - 1])
 
                 if debug:
+                    pygame.event.get() # dummy event to prevent pygame from freezing
                     # draw last rectangle
-                    #pygame.draw.rect(window, rect_cols[rect[4]], (rect[0] * pixel_size, rect[1] * pixel_size, (rect[2] - rect[0]) * pixel_size, (rect[3] - rect[1]) * pixel_size), 5)
                     pygame.draw.rect(window, rect_cols[last_material - 1], (block_start_x * pixel_size, y * pixel_size, (block_end_x - block_start_x) * pixel_size, (block_end_y - y) * pixel_size), 5)
+                    pygame.display.update()
+                    clock.tick(debug_fps)
 
                 # if last block is touching current block, use current position as current block's start position
                 if map_copy[y][x] != 0:
@@ -158,7 +172,13 @@ def greedy_voxel_merging():
 
 
 if debug:
-    draw_map()
+    for i in range(32):
+        pygame.event.get() # dummy event to prevent pygame from freezing
+
+        draw_map()
+
+        pygame.display.update()
+        clock.tick(60)
 
 greedy_voxel_merging()
 
@@ -221,7 +241,7 @@ while True:
         pygame.draw.rect(window, rect_cols[rect[4]], (rect[0] * pixel_size, rect[1] * pixel_size, (rect[2] - rect[0]) * pixel_size, (rect[3] - rect[1]) * pixel_size), 5)
     
     # draw pixel type text
-    text = font.render(f"Pixel type: {pixel_material}", True, pixel_material_cols[pixel_material - 1])
+    text = font.render(f"material: {pixel_material}", True, pixel_material_cols[pixel_material - 1])
     window.blit(text, (10, 5))
 
     # update
